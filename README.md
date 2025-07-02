@@ -116,7 +116,7 @@ The tool **automatically filters out:**
 
 ## ✉️ Support
 
-For feature requests or issues, kindly open a [GitHub Issue](https://github.com/your-username/teams-chat-export/issues)
+For feature requests or issues, kindly open a [GitHub Issue](https://github.com/Tabisharaza/teams-chat-export/issues)
 For private consultations or enterprise needs, feel free to connect.
 
 ---

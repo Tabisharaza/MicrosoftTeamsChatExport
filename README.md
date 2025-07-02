@@ -22,7 +22,7 @@ This lightweight, browser-based tool uses Microsoft Graph API with modern authen
 ### 1. **Clone the Repository**
 
 ```bash
-git clone https://github.com/your-username/teams-chat-export.git
+git clone https://github.com/Tabisharaza/MicrosoftTeamsChatExport.git
 cd teams-chat-export
 ```
 

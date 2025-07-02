@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Microsoft Teams Chat Export</title>
+  <script src="https://alcdn.msauth.net/browser/2.37.0/js/msal-browser.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9;
+      padding: 30px;
+      color: #333;
+    }
+
+    h2 {
+      color: #005a9e;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #0078d4;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+
+    button:hover {
+      background-color: #005a9e;
+    }
+
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    li {
+      padding: 10px;
+      background-color: white;
+      margin: 5px 0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    li:hover {
+      background-color: #e6f0ff;
+    }
+
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+
+    #loadMore {
+      display: none;
+      margin-top: 10px;
+    }
+
+    #loaderOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(255, 255, 255, 0.9);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      color: #0078d4;
+      font-weight: bold;
+      z-index: 9999;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loaderOverlay">⏳ Please wait... Exporting chat</div>
+
+  <h2>Microsoft Teams Chat Export Tool</h2>
+  <button onclick="signIn()">🔐 Sign In with Microsoft</button>
+
+  <h3>📂 Your Chats:</h3>
+  <ul id="chatList"></ul>
+  <button id="loadMore" onclick="loadMoreChats()">🔄 Load More Chats</button>
+
+  <div id="status"></div>
+
+  <script>
+    const msalConfig = {
+      auth: {
+        clientId: ADD YOUR CLIENT ID HERE,
+        authority: 'https://login.microsoftonline.com/ADD YOUR TENET ID HERE',
+        redirectUri: window.location.href //-- MAKE SURE TO ADD THIS URI IN MICROSOFT APPS
+      }
+    };
+
+    const loginRequest = {
+      scopes: ['Chat.Read', 'Chat.ReadBasic', 'User.Read'] //--THESE PERMISSIONS MUST FOR ACCESS
+    };
+
+    const msalInstance = new msal.PublicClientApplication(msalConfig);
+    let accessToken = null;
+    let chatNextLink = null;
+
+    function showLoader(show) {
+      const loader = document.getElementById('loaderOverlay');
+      loader.style.display = show ? 'flex' : 'none';
+    }
+
+    async function signIn() {
+      try {
+        const loginResponse = await msalInstance.loginPopup(loginRequest);
+        const account = msalInstance.getAllAccounts()[0];
+        const tokenResponse = await msalInstance.acquireTokenSilent({
+          ...loginRequest,
+          account
+        });
+        accessToken = tokenResponse.accessToken;
+        await loadChats(true);
+      } catch (err) {
+        console.error('Authentication error:', err);
+        alert('Authentication failed. Check console for details.');
+      }
+    }
+async function getChatMemberNames(chatId) {
+  try {
+    const res = await fetch(`https://graph.microsoft.com/v1.0/me/chats/${chatId}/members`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    const data = await res.json();
+    const names = data.value
+      .map(m => m.displayName)
+      .filter(name => name && name !== '')
+      .join(', ');
+    return names || chatId;
+  } catch (e) {
+    console.warn('Could not get chat member names:', e);
+    return chatId;
+  }
+}
+
+    async function loadChats(initial = false) {
+      const url = initial ? 'https://graph.microsoft.com/v1.0/me/chats' : chatNextLink;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      });
+
+      const data = await res.json();
+      const chatList = document.getElementById('chatList');
+
+for (const chat of data.value) {
+  const li = document.createElement('li');
+  const chatName = chat.topic || await getChatMemberNames(chat.id);
+  li.textContent = `Chat: ${chatName}`;
+  li.onclick = () => exportChat(chat.id, chatName);
+  chatList.appendChild(li);
+}
+      chatNextLink = data['@odata.nextLink'] || null;
+      document.getElementById('loadMore').style.display = chatNextLink ? 'block' : 'none';
+    }
+
+    async function loadMoreChats() {
+      if (chatNextLink) {
+        await loadChats(false);
+      }
+    }
+
+    async function exportChat(chatId,chatName) {
+      const status = document.getElementById('status');
+      status.textContent = '⏳ Preparing download...';
+      showLoader(true);
+
+      const messages = [];
+      let nextLink = `https://graph.microsoft.com/v1.0/me/chats/${chatId}/messages`;
+
+      try {
+        while (nextLink) {
+          const res = await fetch(nextLink, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`
+            }
+          });
+          const data = await res.json();
+
+          data.value.forEach(msg => {
+            const displayName = msg.from?.user?.displayName || 'Unknown';
+            const userIdentityType = msg.from?.user?.userIdentityType || 'Unknown';
+
+            // ❌ Skip if both identity fields are unknown or missing
+            if (displayName === 'Unknown' && userIdentityType === 'Unknown') return;
+  if (displayName.toLowerCase().includes('fireflies.ai')) return;
+
+            messages.push({
+              displayName,
+              userIdentityType,
+              content: msg.body?.content || '',
+              createdDateTime: msg.createdDateTime || ''
+            });
+          });
+
+          nextLink = data['@odata.nextLink'] || null;
+        }
+
+        status.textContent = '📥 Downloading...';
+const safeName = chatName
+  .replace(/[\/\\:*?"<>|]/g, '_')  // Replace only truly unsafe characters
+  .substring(0, 80)                // Keep length reasonable for filesystem
+  .trim();
+
+downloadJSON(messages, `chat-${safeName}.json`);
+
+        status.textContent = `✅ Download complete (${messages.length} messages)`;
+      } catch (error) {
+        console.error('Download error:', error);
+        status.textContent = '❌ Failed to export chat. Check console.';
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    function downloadJSON(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json'
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      document.body.appendChild(link);
+      link.style.display = 'none';
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      link.remove();
+    }
+  </script>
+</body>
+</html>

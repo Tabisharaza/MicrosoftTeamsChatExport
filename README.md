@@ -106,13 +106,6 @@ The tool **automatically filters out:**
 
 ---
 
-## 📜 License
-
-This project is open-sourced under the **MIT License**.
-Feel free to fork, adapt, and contribute improvements.
-
----
-
 ## 🙏 Acknowledgements
 
 * Microsoft Graph API Team
